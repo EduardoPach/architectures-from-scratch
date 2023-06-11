@@ -7,7 +7,13 @@ from torch.nn import functional as F
 
 @dataclass
 class TransformerConfig:
-    ...
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    intermediate_size: int = 3072
+    hidden_dropout_prob: float = 0.1
+    max_position_embeddings: int = 512
+    vocab_size: int = 30522
 
 def scaled_dot_product_attention(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, mask: torch.Tensor | None=None) -> torch.Tensor:
     """Computes scaled dot product attention for a batch of queries, keys and values.
@@ -94,10 +100,43 @@ class MultiHeadAttention(nn.Module):
 
 
 class FeedForward(nn.Module):
-    ...
+    def __init__(self, config: TransformerConfig) -> None:
+        super(FeedForward, self).__init__()
+        self.linear1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.linear2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.gelu = nn.GELU()
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out = self.linear1(x)
+        out = self.gelu(out)
+        out = self.dropout(out)
+        out = self.linear2(out)
+        return out # Logits
 
 class TransformerEncoderLayer(nn.Module):
-    ...
+    def __init__(self, config: TransformerConfig) -> None:
+        super(TransformerEncoderLayer, self).__init__()
+        self.layer_norm1 = nn.LayerNorm(config.hidden_size)
+        self.layer_norm2 = nn.LayerNorm(config.hidden_size)
+        self.attention = MultiHeadAttention(config)
+        self.feed_forward = FeedForward(config)
+
+    def forward(self, x: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        out = self.layer_norm1(x)
+        x += self.attention(out, attention_mask)
+        x += self.feed_forward(self.layer_norm2(x))
+
+        return x
 
 class TransfomerEncoder(nn.Module):
-    ...
+    def __init__(self, config: TransformerConfig) -> None:
+        super(TransfomerEncoder, self).__init__()
+        self.embedding = Embeddings(config)
+        self.layers = nn.ModuleList([TransformerEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+
+    def forward(self, x: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        x = self.embedding(x)
+        for layer in self.layers:
+            x = layer(x, attention_mask)
+        return x
