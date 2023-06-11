@@ -80,7 +80,18 @@ class AttentionHead(nn.Module):
         )
 
 class MultiHeadAttention(nn.Module):
-    ...
+    def __init__(self, config: TransformerConfig) -> None:
+        super(MultiHeadAttention, self).__init__()
+        num_heads = config.num_attention_heads
+        embedding_dim = config.hidden_size # Keeping HuggingFace notation
+        head_dim = embedding_dim // num_heads
+        self.heads = nn.ModuleList([AttentionHead(embedding_dim, head_dim) for _ in range(num_heads)])
+        self.linear = nn.Linear(embedding_dim, embedding_dim)
+    
+    def forward(self, x: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        out = torch.cat([head(x, attention_mask) for head in self.heads], dim=-1)
+        return self.linear(out)
+
 
 class FeedForward(nn.Module):
     ...
